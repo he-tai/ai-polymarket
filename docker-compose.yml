@@ -1,0 +1,37 @@
+services:
+  auto-trader:
+    build: .
+    container_name: ai-polymarket-auto-trader
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # 自动循环参数，可按需覆盖
+      AUTO_LIVE_MODE: "${AUTO_LIVE_MODE:-false}"
+      AUTO_TOP_MARKETS: "${AUTO_TOP_MARKETS:-10}"
+      AUTO_MAX_ORDERS: "${AUTO_MAX_ORDERS:-1}"
+      AUTO_MIN_CONFIDENCE: "${AUTO_MIN_CONFIDENCE:-0.8}"
+      AUTO_DEFAULT_SIZE: "${AUTO_DEFAULT_SIZE:-5}"
+      AUTO_ANALYSIS_TIMEOUT_S: "${AUTO_ANALYSIS_TIMEOUT_S:-45}"
+      AUTO_INTERVAL_SECONDS: "${AUTO_INTERVAL_SECONDS:-60}"
+      AUTO_SIGNATURE_TYPE: "${AUTO_SIGNATURE_TYPE:-1}"
+      RUNTIME_CONFIG_PATH: "${RUNTIME_CONFIG_PATH:-config/runtime_config.json}"
+    volumes:
+      - ./reports:/app/reports
+      - ./trading.db:/app/trading.db
+      - ./logs:/app/logs
+      - ./config:/app/config
+
+  dashboard:
+    build: .
+    container_name: ai-polymarket-dashboard
+    restart: unless-stopped
+    env_file:
+      - .env
+    command: ["uvicorn", "polymarket.web_dashboard:app", "--host", "0.0.0.0", "--port", "8080"]
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./trading.db:/app/trading.db
+      - ./logs:/app/logs
+      - ./config:/app/config
