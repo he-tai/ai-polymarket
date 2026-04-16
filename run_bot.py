@@ -493,14 +493,17 @@ def _cmd_funding_check(args) -> int:
 def _cmd_auto_trade(args) -> int:
     deepseek_cfg = deepseek_config_from_env()
     if deepseek_cfg is None:
+        log_json(LOGGERS["runtime"], {"event": "auto_trade_error", "error": "missing_deepseek_api_key"})
         raise SystemExit("缺少 DEEPSEEK_API_KEY，无法进行 AI 自动分析下单。")
 
     trading_client = None
     if args.live:
         if args.confirm_live != "YES":
+            log_json(LOGGERS["runtime"], {"event": "auto_trade_error", "error": "missing_confirm_live_yes"})
             raise SystemExit("自动下单需要 --live --confirm-live YES。")
         cfg = live_trading_config_from_env()
         if cfg is None:
+            log_json(LOGGERS["runtime"], {"event": "auto_trade_error", "error": "missing_live_env"})
             raise SystemExit("缺少实盘环境变量：PRIVATE_KEY / FUNDER_ADDRESS。")
         effective_cfg = LiveTradingConfig(
             private_key=cfg.private_key,
@@ -508,26 +511,42 @@ def _cmd_auto_trade(args) -> int:
             signature_type=(cfg.signature_type if args.signature_type is None else int(args.signature_type)),
         )
         trading_client = build_trading_client(effective_cfg)
+    log_json(
+        LOGGERS["runtime"],
+        {
+            "event": "auto_trade_start",
+            "live": args.live,
+            "top_markets": args.top_markets,
+            "max_orders": args.max_orders,
+            "min_confidence": args.min_confidence,
+            "default_size": args.default_size,
+            "analysis_timeout_s": args.analysis_timeout_s,
+        },
+    )
 
     gamma = GammaClient()
     clob = ClobPublicClient()
     try:
-        results = auto_trade_markets(
-            gamma=gamma,
-            clob=clob,
-            trading_client=trading_client,
-            deepseek_cfg=deepseek_cfg,
-            cfg=AutoTradeConfig(
-                top_markets=args.top_markets,
-                max_orders=args.max_orders,
-                min_confidence=args.min_confidence,
-                default_size=args.default_size,
-                outcome_index=args.outcome_index,
-                live=args.live,
-            ),
-            analysis_timeout_s=args.analysis_timeout_s,
-            loggers=LOGGERS,
-        )
+        try:
+            results = auto_trade_markets(
+                gamma=gamma,
+                clob=clob,
+                trading_client=trading_client,
+                deepseek_cfg=deepseek_cfg,
+                cfg=AutoTradeConfig(
+                    top_markets=args.top_markets,
+                    max_orders=args.max_orders,
+                    min_confidence=args.min_confidence,
+                    default_size=args.default_size,
+                    outcome_index=args.outcome_index,
+                    live=args.live,
+                ),
+                analysis_timeout_s=args.analysis_timeout_s,
+                loggers=LOGGERS,
+            )
+        except Exception as exc:  # noqa: BLE001
+            log_json(LOGGERS["runtime"], {"event": "auto_trade_exception", "error": str(exc)})
+            raise
         log_json(
             LOGGERS["runtime"],
             {

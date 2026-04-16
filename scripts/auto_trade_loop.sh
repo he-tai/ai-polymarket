@@ -1,6 +1,10 @@
 #!/usr/bin/env sh
 set -eu
 
+mkdir -p logs
+touch logs/runtime.log logs/analysis.log logs/orders.log
+exec >> logs/runtime.log 2>&1
+
 TOP_MARKETS="${AUTO_TOP_MARKETS:-10}"
 MAX_ORDERS="${AUTO_MAX_ORDERS:-1}"
 MIN_CONFIDENCE="${AUTO_MIN_CONFIDENCE:-0.8}"
@@ -15,8 +19,7 @@ echo "[auto-loop] 启动自动交易循环"
 echo "[auto-loop] LIVE_MODE=${LIVE_MODE}, TOP_MARKETS=${TOP_MARKETS}, MAX_ORDERS=${MAX_ORDERS}, INTERVAL_SECONDS=${INTERVAL_SECONDS}"
 
 while true; do
-  eval "$(
-    python - <<PY
+  python - <<PY > /tmp/ai_polymarket_runtime.env
 import json, os, pathlib
 cfg_path = pathlib.Path("${RUNTIME_CONFIG_PATH}")
 cfg = {}
@@ -38,7 +41,7 @@ print(f"SIGNATURE_TYPE={pick('signature_type','AUTO_SIGNATURE_TYPE','1')}")
 live = pick('live_mode','AUTO_LIVE_MODE','false')
 print(f"LIVE_MODE={'true' if str(live).lower()=='true' else 'false'}")
 PY
-  )"
+  . /tmp/ai_polymarket_runtime.env
 
   if [ "${LIVE_MODE}" = "true" ]; then
     echo "[auto-loop] 执行真实自动下单"
