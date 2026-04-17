@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+import json
+import os
+from dataclasses import dataclass, field
+from datetime import date
 
 
 @dataclass(frozen=True)
@@ -15,6 +18,59 @@ class RiskLimits:
 class RiskState:
     position_size: float = 0.0
     realized_pnl: float = 0.0
+    trade_date: str = field(default_factory=lambda: str(date.today()))
+
+    # ------------------------------------------------------------------ #
+    # 持久化：将 RiskState 写入 / 从 JSON 文件读取，按交易日自动重置        #
+    # ------------------------------------------------------------------ #
+    def save(self, path: str) -> None:
+        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+        with open(path, "w") as f:
+            json.dump(
+                {
+                    "position_size": self.position_size,
+                    "realized_pnl": self.realized_pnl,
+                    "trade_date": self.trade_date,
+                },
+                f,
+                indent=2,
+            )
+
+    @classmethod
+    def load(cls, path: str) -> "RiskState":
+        """
+        从文件加载状态。若文件不存在或日期已过，返回新的当日状态（自动重置）。
+        """
+        today = str(date.today())
+        if not os.path.exists(path):
+            return cls(trade_date=today)
+        try:
+            with open(path) as f:
+                data = json.load(f)
+            if data.get("trade_date") != today:
+                # 新的交易日 → 重置 PnL，但保留持仓（持仓跨日不重置）
+                return cls(
+                    position_size=data.get("position_size", 0.0),
+                    realized_pnl=0.0,
+                    trade_date=today,
+                )
+            return cls(
+                position_size=data.get("position_size", 0.0),
+                realized_pnl=data.get("realized_pnl", 0.0),
+                trade_date=today,
+            )
+        except Exception:
+            return cls(trade_date=today)
+
+
+def mid_price(best_bid: float | None, best_ask: float | None) -> float | None:
+    """
+    用盘口 mid-price 作为公允价格的近似。
+    若盘口缺失则返回 None。
+    """
+    if best_bid is None or best_ask is None:
+        return None
+    return (best_bid + best_ask) / 2.0
 
 
 def edge_bps(fair: float, execution_price: float, side: str) -> float:
